@@ -1,3 +1,6 @@
 .eggs/
 result/
 flareenv/
+dataset/
+experiments/
+tb_logger/

@@ -1,3 +1,8 @@
- python test_large.py --input ../Datasets_original/flare7K/Flare7Kpp/test_data/real/input --output result/test_real/flare7kpp/ --model_path experiments/flare7kpp/net_g_last.pth --flare7kpp 
+ python test_large.py --input dataset/Flare7Kpp/test_data/real/input --output result/test_real/flare7kpp/ --model_path experiments/flare7kpp/net_g_last.pth --flare7kpp
 
- python test_large.py --input mytest --output result/test_real/flare7kpp/ --model_path experiments/flare7kpp/net_g_last.pth --flare7kpp 
+python test_large.py --input ../Datasets_original/flare7K/Flare7Kpp/test_data/real/input --output result/test_real/flare7kpp/ --model_path experiments/flare7kpp/net_g_last.pth --flare7kpp 
+
+ python test_large.py --input mytest --output result/test_real/flare7kpp/ --model_path experiments/flare7kpp/net_g_last.pth --flare7kpp
+
+rm -f $(find dataset -type f -name "*.Identifier")
+ 
