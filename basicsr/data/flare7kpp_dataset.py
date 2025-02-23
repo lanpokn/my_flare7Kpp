@@ -258,7 +258,9 @@ class Flare_Image_Loader(data.Dataset):
         #TODO, using inverse tone mapping, add and then tone maaping	
 		# merge_img=flare_img+base_img
 		# merge_img=torch.clamp(merge_img,min=0,max=1)
-		merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ ACES_profession_reverse(base_img))
+		# can't predict auto exposure, thus use it
+		AC_gain=np.random.uniform(0.7,1.0)
+		merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ ACES_profession_reverse(AC_gain*base_img))
 		merge_img = torch.from_numpy(merge_img).float()
 		merge_img=torch.clamp(merge_img,min=0,max=1)
 		if self.light_flag:
