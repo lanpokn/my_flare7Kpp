@@ -212,7 +212,7 @@ class Flare_Image_Loader(data.Dataset):
 		# merge_img=torch.clamp(merge_img,min=0,max=1)
 		AC_gain=np.random.uniform(0.7,1.0)
 		AC_gain=0.5
-		merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ ACES_profession_reverse(AC_gain*base_img))
+		merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AC_gain*ACES_profession_reverse(base_img))
 		print(merge_img.shape)
 		merge_img = torch.from_numpy(merge_img).float()
 		print(merge_img.shape)
