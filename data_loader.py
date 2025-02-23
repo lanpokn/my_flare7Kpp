@@ -12,7 +12,95 @@ from torch.distributions import Normal
 import torch
 import numpy as np
 import torch
+def ACES_profession(x):
+	# 定义输入和输出的转换矩阵
+	ACESInputMat = np.array([
+		[0.59719, 0.35458, 0.04823],
+		[0.07600, 0.90834, 0.01566],
+		[0.02840, 0.13383, 0.83777]
+	])
 
+	ACESOutputMat = np.array([
+		[1.60475, -0.53108, -0.07367],
+		[-0.10208, 1.10813, -0.00605],
+		[-0.00327, -0.07276, 1.07602]
+	])
+
+	def RRTAndODTFit(v):
+		"""
+		模拟 HLSL 的 RRTAndODTFit 函数
+		"""
+		a = v * (v + 0.0245786) - 0.000090537
+		b = v * (0.983729 * v + 0.4329510) + 0.238081
+		return a / b
+
+	# 将图像展平为二维矩阵 (N, 3)，其中 N 是像素数
+	original_shape = x.shape
+	color = x.reshape(-1, 3).T
+
+	# 转换为线性空间
+	color = np.dot(ACESInputMat, color)
+
+	# 应用 RRT 和 ODT 映射
+	color = RRTAndODTFit(color)
+
+	# 转换为 sRGB 空间
+	color = np.dot(ACESOutputMat, color)
+
+	# 恢复为原始图像形状
+	color = color.T.reshape(original_shape)
+
+	return color
+
+def ACES_profession_reverse(x):
+	# 定义输入和输出的转换矩阵
+	ACESInputMat = np.array([
+		[0.59719, 0.35458, 0.04823],
+		[0.07600, 0.90834, 0.01566],
+		[0.02840, 0.13383, 0.83777]
+	])
+
+	ACESOutputMat = np.array([
+		[1.60475, -0.53108, -0.07367],
+		[-0.10208, 1.10813, -0.00605],
+		[-0.00327, -0.07276, 1.07602]
+	])
+
+	ACESInputMat_inv = np.linalg.inv(ACESInputMat)
+	ACESOutputMat_inv = np.linalg.inv(ACESOutputMat)
+
+	def RRTAndODTFitInverse(y):
+		"""
+		计算 RRTAndODTFit 的逆函数
+		"""
+		A = 0.983729 * y - 1
+		B = 0.4329510 * y - 0.0245786
+		C = 0.238081 * y + 0.000090537
+
+		discriminant = B**2 - 4 * A * C
+		sqrt_discriminant = np.sqrt(discriminant)
+
+		# 选择符合 v > 0 的解
+		v2 = (-B - sqrt_discriminant) / (2 * A)
+		return v2
+
+	# 将图像展平为二维矩阵 (N, 3)，其中 N 是像素数
+	original_shape = x.shape
+	color = x.reshape(-1, 3).T
+
+	# 转换为线性空间
+	color = np.dot(ACESOutputMat_inv, color)
+
+	# 应用 RRT 和 ODT 映射的逆函数
+	color = RRTAndODTFitInverse(color)
+
+	# 转换为 sRGB 空间
+	color = np.dot(ACESInputMat_inv, color)
+
+	# 恢复为原始图像形状
+	color = color.T.reshape(original_shape)
+
+	return color
 
 class RandomGammaCorrection(object):
 	def __init__(self, gamma = None):
@@ -31,6 +119,7 @@ class RandomGammaCorrection(object):
 		else:
 			return TF.adjust_gamma(image,self.gamma,gain=1)
 
+#is not true remove
 def remove_background(image):
 	#the input of the image is PIL.Image form with [H,W,C]
 	image=np.float32(np.array(image))
@@ -64,6 +153,7 @@ class Flare_Image_Loader(data.Dataset):
 
 	def __getitem__(self, index):
 		# load base image
+
 		img_path=self.data_list[index]
 		base_img= Image.open(img_path)
 		
@@ -118,6 +208,12 @@ class Flare_Image_Loader(data.Dataset):
 
 		#merge image	
 		merge_img=flare_img+base_img
+		print(merge_img.shape)
+		# merge_img=torch.clamp(merge_img,min=0,max=1)
+		merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ ACES_profession_reverse(base_img))
+		print(merge_img.shape)
+		merge_img = torch.from_numpy(merge_img).float()
+		print(merge_img.shape)
 		merge_img=torch.clamp(merge_img,min=0,max=1)
 
 		if self.mask_type==None:

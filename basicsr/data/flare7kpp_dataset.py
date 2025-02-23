@@ -13,7 +13,95 @@ import torch
 import numpy as np
 import torch
 from basicsr.utils.registry import DATASET_REGISTRY
+def ACES_profession(x):
+	# 定义输入和输出的转换矩阵
+	ACESInputMat = np.array([
+		[0.59719, 0.35458, 0.04823],
+		[0.07600, 0.90834, 0.01566],
+		[0.02840, 0.13383, 0.83777]
+	])
 
+	ACESOutputMat = np.array([
+		[1.60475, -0.53108, -0.07367],
+		[-0.10208, 1.10813, -0.00605],
+		[-0.00327, -0.07276, 1.07602]
+	])
+
+	def RRTAndODTFit(v):
+		"""
+		模拟 HLSL 的 RRTAndODTFit 函数
+		"""
+		a = v * (v + 0.0245786) - 0.000090537
+		b = v * (0.983729 * v + 0.4329510) + 0.238081
+		return a / b
+
+	# 将图像展平为二维矩阵 (N, 3)，其中 N 是像素数
+	original_shape = x.shape
+	color = x.reshape(-1, 3).T
+
+	# 转换为线性空间
+	color = np.dot(ACESInputMat, color)
+
+	# 应用 RRT 和 ODT 映射
+	color = RRTAndODTFit(color)
+
+	# 转换为 sRGB 空间
+	color = np.dot(ACESOutputMat, color)
+
+	# 恢复为原始图像形状
+	color = color.T.reshape(original_shape)
+
+	return color
+
+def ACES_profession_reverse(x):
+	# 定义输入和输出的转换矩阵
+	ACESInputMat = np.array([
+		[0.59719, 0.35458, 0.04823],
+		[0.07600, 0.90834, 0.01566],
+		[0.02840, 0.13383, 0.83777]
+	])
+
+	ACESOutputMat = np.array([
+		[1.60475, -0.53108, -0.07367],
+		[-0.10208, 1.10813, -0.00605],
+		[-0.00327, -0.07276, 1.07602]
+	])
+
+	ACESInputMat_inv = np.linalg.inv(ACESInputMat)
+	ACESOutputMat_inv = np.linalg.inv(ACESOutputMat)
+
+	def RRTAndODTFitInverse(y):
+		"""
+		计算 RRTAndODTFit 的逆函数
+		"""
+		A = 0.983729 * y - 1
+		B = 0.4329510 * y - 0.0245786
+		C = 0.238081 * y + 0.000090537
+
+		discriminant = B**2 - 4 * A * C
+		sqrt_discriminant = np.sqrt(discriminant)
+
+		# 选择符合 v > 0 的解
+		v2 = (-B - sqrt_discriminant) / (2 * A)
+		return v2
+
+	# 将图像展平为二维矩阵 (N, 3)，其中 N 是像素数
+	original_shape = x.shape
+	color = x.reshape(-1, 3).T
+
+	# 转换为线性空间
+	color = np.dot(ACESOutputMat_inv, color)
+
+	# 应用 RRT 和 ODT 映射的逆函数
+	color = RRTAndODTFitInverse(color)
+
+	# 转换为 sRGB 空间
+	color = np.dot(ACESInputMat_inv, color)
+
+	# 恢复为原始图像形状
+	color = color.T.reshape(original_shape)
+
+	return color
 class RandomGammaCorrection(object):
 	def __init__(self, gamma = None):
 		self.gamma = gamma
@@ -160,13 +248,18 @@ class Flare_Image_Loader(data.Dataset):
 			flare_img=color_jitter(flare_img)
 
 		#flare blur
+		#mannuly blur here, interteresting
 		blur_transform=transforms.GaussianBlur(21,sigma=(0.1,3.0))
 		flare_img=blur_transform(flare_img)
 		#flare_img=flare_img+flare_DC_offset
 		flare_img=torch.clamp(flare_img,min=0,max=1)
 
-		#merge image	
-		merge_img=flare_img+base_img
+		#merge image
+        #TODO, using inverse tone mapping, add and then tone maaping	
+		# merge_img=flare_img+base_img
+		# merge_img=torch.clamp(merge_img,min=0,max=1)
+		merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ ACES_profession_reverse(base_img))
+		merge_img = torch.from_numpy(merge_img).float()
 		merge_img=torch.clamp(merge_img,min=0,max=1)
 		if self.light_flag:
 			base_img=base_img+light_img
@@ -204,6 +297,7 @@ class Flare_Image_Loader(data.Dataset):
 			luminance=0.3*light_img[0]+0.59*light_img[1]+0.11*light_img[2]
 			threshold_value=0.01
 			flare_mask=torch.where(luminance >threshold_value, one, zero)
+		#TODO, you may need to check whether these mask are correct
 		return {'gt': adjust_gamma_reverse(base_img),'flare': adjust_gamma_reverse(flare_img),'lq': adjust_gamma_reverse(merge_img),'mask': flare_mask,'gamma': gamma}
 
 	def __len__(self):
