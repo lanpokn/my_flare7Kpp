@@ -59,6 +59,7 @@ path:
 #test done can get pretrained model, but epoch will be reset, unless set resume_state
 #有bug,resume_state 不设置成空，就无法读取 experiments/flare7kpp/net_g_last.pth "\\wsl.localhost\Ubuntu\home\lanpokn\2025\Flare7K\experiments\Uformer_flare7kpp_baseline_option.yml_archived_20250223_212745\models\net_g_5000.pth"
 #TODO 做个实验，先设置成flare7K的参数，用7Kpp数据集训练，看看会怎么样 experiments/Uformer_flare7kpp_baseline_option.yml_archived_20250223_212745/models/net_g_5000.pth
+  # pretrain_network_g: experiments/flare7kpp/net_g_last.pth experiments/tone_mapping2/models/net_g_10000.pth
   pretrain_network_g: experiments/flare7kpp/net_g_last.pth
   strict_load_g: True
   resume_state: ~
@@ -109,7 +110,8 @@ val:
 # logging settings
 logger:
   print_freq: 100
-  save_checkpoint_freq: !!float 5e3
+  # save_checkpoint_freq: !!float 5e3
+  save_checkpoint_freq: !!float 2500
   use_tb_logger: true
   wandb:
     project: ~

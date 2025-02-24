@@ -210,14 +210,21 @@ class Flare_Image_Loader(data.Dataset):
 		merge_img=flare_img+base_img
 		print(merge_img.shape)
 		# merge_img=torch.clamp(merge_img,min=0,max=1)
-		AC_gain=np.random.uniform(0.5,1.0)
-		blur_transform=transforms.GaussianBlur(3,sigma=(1,2))
+		# AC_gain=np.random.uniform(0.5,1.0)
+		# AC_gain=0.75
+		# blur_transform=transforms.GaussianBlur(3,sigma=(1,2))
+		# merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AC_gain*ACES_profession_reverse(blur_transform(base_img)))
+		# print(merge_img.shape)
+		# merge_img = torch.from_numpy(merge_img).float()
+		# print(merge_img.shape)
+		# merge_img=torch.clamp(merge_img,min=0,max=1)
+		# AC_gain=np.random.uniform(0.75,1.0)
+		AC_gain=0.9
+  		# the artifact on the lens will also cause the scene to become unclear
+		blur_transform=transforms.GaussianBlur(3,sigma=(0.9,1))
 		merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AC_gain*ACES_profession_reverse(blur_transform(base_img)))
-		print(merge_img.shape)
 		merge_img = torch.from_numpy(merge_img).float()
-		print(merge_img.shape)
 		merge_img=torch.clamp(merge_img,min=0,max=1)
-
 		if self.mask_type==None:
 			return adjust_gamma_reverse(base_img),adjust_gamma_reverse(flare_img),adjust_gamma_reverse(merge_img),gamma
 		elif self.mask_type=="luminance":

@@ -256,13 +256,17 @@ class Flare_Image_Loader(data.Dataset):
 
 		#merge image
         #TODO, using inverse tone mapping, add and then tone maaping	
-		# merge_img=flare_img+base_img
-		# merge_img=torch.clamp(merge_img,min=0,max=1)
+
 		# can't predict auto exposure, thus use it，AC_gain is  different factor compared with tone mapping 
-		AC_gain=np.random.uniform(0.5,1.0)
-  		# the artifact on the lens will also cause the scene to become unclear
-		blur_transform=transforms.GaussianBlur(3,sigma=(0.01,2))
-		merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AC_gain*ACES_profession_reverse(blur_transform(base_img)))
+        # maybe 0.5 is too low, use 0.75 instead	
+		AC_gain=np.random.uniform(0.75,1.0)
+  		# # the artifact on the lens will also cause the scene to become unclear
+		blur_transform=transforms.GaussianBlur(3,sigma=(0.9,1))
+  
+		# merge_img=flare_img+blur_transform(base_img)
+		# merge_img=torch.clamp(merge_img,min=0,max=1)
+		# merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AC_gain*ACES_profession_reverse(blur_transform(base_img)))
+		merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ ACES_profession_reverse(base_img))
 		merge_img = torch.from_numpy(merge_img).float()
 		merge_img=torch.clamp(merge_img,min=0,max=1)
 		if self.light_flag:
