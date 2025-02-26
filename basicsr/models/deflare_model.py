@@ -61,6 +61,7 @@ class DeflareModel(SRModel):
             self.mask = data['mask'].to(self.device)
 
     def optimize_parameters(self, current_iter):
+        #TODO better loss
         self.optimizer_g.zero_grad()
         self.output = self.net_g(self.lq)
         
@@ -80,8 +81,9 @@ class DeflareModel(SRModel):
         l1=l1_flare+l1_base
         if self.output_ch==6:
             l1_recons= self.l1_pix(self.merge_hat, self.lq)
-            loss_dict['l1_recons']=l1_recons*2
-            l1+=l1_recons*2
+            # print(1) loss_dict['l1_recons']根本没用，我被骗了
+            loss_dict['l1_recons']=l1_recons*2*0
+            l1+=l1_recons*2*0
         l_total += l1
         loss_dict['l1_flare']=l1_flare
         loss_dict['l1_base']=l1_base

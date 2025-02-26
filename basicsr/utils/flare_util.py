@@ -8,6 +8,95 @@ from skimage import morphology
 import torch
 import numpy as np
 
+import torch
+
+def ACES_profession(x):
+    """PyTorch 版 ACES 颜色转换"""
+    ACESInputMat = torch.tensor([
+        [0.59719, 0.35458, 0.04823],
+        [0.07600, 0.90834, 0.01566],
+        [0.02840, 0.13383, 0.83777]
+    ], dtype=torch.float32, device=x.device)
+
+    ACESOutputMat = torch.tensor([
+        [1.60475, -0.53108, -0.07367],
+        [-0.10208, 1.10813, -0.00605],
+        [-0.00327, -0.07276, 1.07602]
+    ], dtype=torch.float32, device=x.device)
+
+    def RRTAndODTFit(v):
+        """PyTorch 版 RRT 和 ODT 映射"""
+        a = v * (v + 0.0245786) - 0.000090537
+        b = v * (0.983729 * v + 0.4329510) + 0.238081
+        return a / b
+
+    # 将图像展平为 (N, 3)
+    original_shape = x.shape
+    color = x.reshape(-1, 3).T
+
+    # 转换为线性空间
+    color = torch.matmul(ACESInputMat, color)
+
+    # 应用 RRT 和 ODT 映射
+    color = RRTAndODTFit(color)
+
+    # 转换为 sRGB 空间
+    color = torch.matmul(ACESOutputMat, color)
+
+    # 恢复原始形状
+    color = color.T.reshape(original_shape)
+
+    return color
+
+
+def ACES_profession_reverse(x):
+    """PyTorch 版 ACES 颜色逆变换"""
+    ACESInputMat = torch.tensor([
+        [0.59719, 0.35458, 0.04823],
+        [0.07600, 0.90834, 0.01566],
+        [0.02840, 0.13383, 0.83777]
+    ], dtype=torch.float32, device=x.device)
+
+    ACESOutputMat = torch.tensor([
+        [1.60475, -0.53108, -0.07367],
+        [-0.10208, 1.10813, -0.00605],
+        [-0.00327, -0.07276, 1.07602]
+    ], dtype=torch.float32, device=x.device)
+
+    ACESInputMat_inv = torch.inverse(ACESInputMat)
+    ACESOutputMat_inv = torch.inverse(ACESOutputMat)
+
+    def RRTAndODTFitInverse(y):
+        """PyTorch 版 RRT 和 ODT 逆映射"""
+        A = 0.983729 * y - 1
+        B = 0.4329510 * y - 0.0245786
+        C = 0.238081 * y + 0.000090537
+
+        discriminant = B**2 - 4 * A * C
+        sqrt_discriminant = torch.sqrt(discriminant)
+
+        # 选择符合 v > 0 的解
+        v2 = (-B - sqrt_discriminant) / (2 * A)
+        return v2
+
+    # 将图像展平为 (N, 3)
+    original_shape = x.shape
+    color = x.reshape(-1, 3).T
+
+    # 转换为线性空间
+    color = torch.matmul(ACESOutputMat_inv, color)
+
+    # 应用 RRT 和 ODT 逆映射
+    color = RRTAndODTFitInverse(color)
+
+    # 转换为 sRGB 空间
+    color = torch.matmul(ACESInputMat_inv, color)
+
+    # 恢复原始形状
+    color = color.T.reshape(original_shape)
+
+    return color
+
 
 _EPS=1e-7
 
@@ -52,12 +141,21 @@ def adjust_gamma_reverse(image: torch.Tensor, gamma):
 
 def predict_flare_from_6_channel(input_tensor,gamma):
     #the input is a tensor in [B,C,H,W], the C here is 6
+    #TODO use tone mapping to merge?
 
     deflare_img=input_tensor[:,:3,:,:]
     flare_img_predicted=input_tensor[:,3:,:,:]
-
+    # merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ ACES_profession_reverse(AE_gain*base_img))
+    # merge_img = torch.from_numpy(merge_img).float()
+    # merge_img=torch.clamp(merge_img,min=0,max=1)
     merge_img_predicted_linear=adjust_gamma(deflare_img,gamma)+adjust_gamma(flare_img_predicted,gamma)
-    merge_img_predicted=adjust_gamma_reverse(torch.clamp(merge_img_predicted_linear, 1e-7, 1.0),gamma)
+    # merge_img_predicted_linear = ACES_profession(
+    #     ACES_profession_reverse(adjust_gamma(flare_img_predicted, gamma)) +
+    #     ACES_profession_reverse(adjust_gamma(deflare_img, gamma))
+    # )
+    merge_img_predicted = adjust_gamma_reverse(
+        torch.clamp(merge_img_predicted_linear, 1e-7, 1.0), gamma
+    )
     return deflare_img,flare_img_predicted,merge_img_predicted
 
 
