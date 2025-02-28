@@ -143,19 +143,24 @@ class Flare_Image_Loader(data.Dataset):
 		self.reflective_dict={}
 		self.reflective_list=[]
 		self.reflective_name_list=[]
-
+  
+		self.light_flag=False
+		self.light_dict={}
+		self.light_list=[]
+		self.light_name_list=[]
+  
 		self.mask_type=mask_type #It is a str which may be None,"luminance" or "color"
 
 		self.transform_base=transform_base
 		self.transform_flare=transform_flare
+  
 
 		print("Base Image Loaded with examples:", len(self.data_list))
 
 	def __getitem__(self, index):
 		# load base image
-
 		img_path=self.data_list[index]
-		base_img= Image.open(img_path)
+		base_img= Image.open(img_path).convert('RGB')
 		
 		gamma=np.random.uniform(1.8,2.2)
 		to_tensor=transforms.ToTensor()
@@ -176,18 +181,35 @@ class Flare_Image_Loader(data.Dataset):
 		base_img=gain*base_img
 		base_img=torch.clamp(base_img,min=0,max=1)
 
-		#load flare image
-		flare_path=random.choice(self.flare_list)
-		flare_img =Image.open(flare_path)
-		if self.reflective_flag:
-			reflective_path=random.choice(self.reflective_list)
-			reflective_img =Image.open(reflective_path)
+		# choice_dataset = random.choices([i for i in range(len(self.flare_list))], self.data_ratio)[0]
+		choice_index = random.randint(0, len(self.flare_list)-1)
 
+		#load flare and light source image
+		if self.light_flag:
+			print(len(self.light_list))
+			assert len(self.flare_list)==len(self.light_list), "Error, number of light source and flares dataset no match!"
+			# for i in range(len(self.flare_list)):
+			# 	assert len(self.flare_list[i])==len(self.light_list[i]), f"Error, number of light source and flares no match in {i} dataset!"
+			flare_path=self.flare_list[choice_index]
+			light_path=self.light_list[choice_index]
+			light_img=Image.open(light_path).convert('RGB')
+			light_img=to_tensor(light_img)
+			light_img=adjust_gamma(light_img)
+		else:
+			flare_path=self.flare_list[choice_index]
+		flare_img =Image.open(flare_path).convert('RGB')
+		if self.reflective_flag:
+			reflective_path_list=self.reflective_list
+			if len(reflective_path_list) != 0:
+				reflective_path=random.choice(reflective_path_list)
+				reflective_img =Image.open(reflective_path).convert('RGB')
+			else:
+				reflective_img = None
 
 		flare_img=to_tensor(flare_img)
 		flare_img=adjust_gamma(flare_img)
 		
-		if self.reflective_flag:
+		if self.reflective_flag and reflective_img is not None:
 			reflective_img=to_tensor(reflective_img)
 			reflective_img=adjust_gamma(reflective_img)
 			flare_img = torch.clamp(flare_img+reflective_img,min=0,max=1)
@@ -195,38 +217,52 @@ class Flare_Image_Loader(data.Dataset):
 		flare_img=remove_background(flare_img)
 
 		if self.transform_flare is not None:
-			flare_img=self.transform_flare(flare_img)
-		
+			if self.light_flag:
+				flare_merge=torch.cat((flare_img, light_img), dim=0)
+				flare_merge=self.transform_flare(flare_merge)
+			else:
+				flare_img=self.transform_flare(flare_img)
+			
 		#change color
-		flare_img=color_jitter(flare_img)
+		if self.light_flag:
+			#flare_merge=color_jitter(flare_merge)
+			flare_img, light_img = torch.split(flare_merge, 3, dim=0)
+		else:
+			flare_img=color_jitter(flare_img)
 
 		#flare blur
+		#mannuly blur here, interteresting
 		blur_transform=transforms.GaussianBlur(21,sigma=(0.1,3.0))
 		flare_img=blur_transform(flare_img)
-		flare_img=flare_img+flare_DC_offset
+		#flare_img=flare_img+flare_DC_offset
 		flare_img=torch.clamp(flare_img,min=0,max=1)
 
-		#merge image	
-		merge_img=flare_img+base_img
-		print(merge_img.shape)
+		#merge image
+        #TODO, using inverse tone mapping, add and then tone maaping	
+
+		# can't predict auto exposure, thus use it，AC_gain is  different factor compared with tone mapping 
+        # maybe 0.5 is too low, use 0.75 instead	
+		# AE_gain=np.random.uniform(0.9,1.0)
+		AE_gain=1
+		# flare_img=flare_img+AE_gain*base_img
+  		# # the artifact on the lens will also cause the scene to become unclear
+		blur_transform=transforms.GaussianBlur(3,sigma=(0.01,0.5))
+  
+		# merge_img=flare_img+blur_transform(base_img)
+		# merge_img=flare_img+AE_gain*base_img
 		# merge_img=torch.clamp(merge_img,min=0,max=1)
-		# AC_gain=np.random.uniform(0.5,1.0)
-		# AC_gain=0.75
-		# blur_transform=transforms.GaussianBlur(3,sigma=(1,2))
 		# merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AC_gain*ACES_profession_reverse(blur_transform(base_img)))
-		# print(merge_img.shape)
-		# merge_img = torch.from_numpy(merge_img).float()
-		# print(merge_img.shape)
-		# merge_img=torch.clamp(merge_img,min=0,max=1)
-		# AC_gain=np.random.uniform(0.75,1.0)
-		AC_gain=0.9
-  		# the artifact on the lens will also cause the scene to become unclear
-		blur_transform=transforms.GaussianBlur(3,sigma=(0.9,1))
-		merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AC_gain*ACES_profession_reverse(blur_transform(base_img)))
+		# merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AE_gain*ACES_profession_reverse(base_img))
+		merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AE_gain*ACES_profession_reverse(base_img))
 		# merge_img = torch.from_numpy(merge_img).float()
 		merge_img=torch.clamp(merge_img,min=0,max=1)
+		if self.light_flag:
+			base_img=base_img+light_img
+			base_img=torch.clamp(base_img,min=0,max=1)
+			flare_img=flare_img-light_img
+			flare_img=torch.clamp(flare_img,min=0,max=1)
 		if self.mask_type==None:
-			return adjust_gamma_reverse(base_img),adjust_gamma_reverse(flare_img),adjust_gamma_reverse(merge_img),gamma
+			return {adjust_gamma_reverse(base_img),adjust_gamma_reverse(flare_img),adjust_gamma_reverse(merge_img),gamma}
 		elif self.mask_type=="luminance":
 			#calculate mask (the mask is 3 channel)
 			one = torch.ones_like(base_img)
@@ -242,8 +278,22 @@ class Flare_Image_Loader(data.Dataset):
 
 			threshold_value=0.99**gamma
 			flare_mask=torch.where(merge_img >threshold_value, one, zero)
+		elif self.mask_type=="flare":
+			one = torch.ones_like(base_img)
+			zero = torch.zeros_like(base_img)
 
-		return adjust_gamma_reverse(base_img),adjust_gamma_reverse(flare_img),adjust_gamma_reverse(merge_img),flare_mask,gamma
+			threshold_value=0.7**gamma
+			flare_mask=torch.where(flare_img >threshold_value, one, zero)
+		elif self.mask_type=="light":
+			# Depreciated: we dont need light mask anymore
+			one = torch.ones_like(base_img)
+			zero = torch.zeros_like(base_img)
+
+			luminance=0.3*light_img[0]+0.59*light_img[1]+0.11*light_img[2]
+			threshold_value=0.01
+			flare_mask=torch.where(luminance >threshold_value, one, zero)
+		#TODO, you may need to check whether these mask are correct
+		return {'gt': adjust_gamma_reverse(base_img),'flare': adjust_gamma_reverse(flare_img),'lq': adjust_gamma_reverse(merge_img),'mask': flare_mask,'gamma': gamma}
 
 	def __len__(self):
 		return len(self.data_list)
@@ -251,6 +301,8 @@ class Flare_Image_Loader(data.Dataset):
 	def load_scattering_flare(self,flare_name,flare_path):
 		flare_list=[]
 		[flare_list.extend(glob.glob(flare_path + '/*.' + e)) for e in self.ext]
+		flare_list=sorted(flare_list)
+
 		self.flare_name_list.append(flare_name)
 		self.flare_dict[flare_name]=flare_list
 		self.flare_list.extend(flare_list)
@@ -274,3 +326,18 @@ class Flare_Image_Loader(data.Dataset):
 		else:
 			print("Reflective Flare Image:",reflective_name, " is loaded successfully with examples", str(len_reflective_list))
 		print("Now we have",len(self.reflective_list),'refelctive flare images')
+	def load_light_source(self,light_name,light_path):
+		#The number of the light source images should match the number of scattering flares
+		light_list=[]
+		[light_list.extend(glob.glob(light_path + '/*.' + e)) for e in self.ext]
+		light_list=sorted(light_list)
+		self.flare_name_list.append(light_name)
+		self.light_dict[light_name]=light_list
+		self.light_list = light_list
+		len_light_list=len(self.light_dict[light_name])
+		if len_light_list == 0:
+			print("ERROR: Light Source images are not loaded properly")
+		else:
+			self.light_flag=True
+			print("Light Source Image:", light_name, " is loaded successfully with examples", str(len_light_list))
+		print("Now we have",len(self.light_list),'light source images')
