@@ -208,14 +208,6 @@ class Flare_Image_Loader(data.Dataset):
 
 		flare_img=to_tensor(flare_img)
 		flare_img=adjust_gamma(flare_img)
-		
-		if self.reflective_flag and reflective_img is not None:
-			reflective_img=to_tensor(reflective_img)
-			reflective_img=adjust_gamma(reflective_img)
-			flare_img = torch.clamp(flare_img+reflective_img,min=0,max=1)
-
-		flare_img=remove_background(flare_img)
-
 		if self.transform_flare is not None:
 			if self.light_flag:
 				flare_merge=torch.cat((flare_img, light_img), dim=0)
@@ -229,6 +221,17 @@ class Flare_Image_Loader(data.Dataset):
 			flare_img, light_img = torch.split(flare_merge, 3, dim=0)
 		else:
 			flare_img=color_jitter(flare_img)
+
+		if self.reflective_flag and reflective_img is not None:
+			reflective_img=to_tensor(reflective_img)
+			reflective_img=adjust_gamma(reflective_img)
+			if self.transform_flare is not None:
+				reflective_img=self.transform_flare(reflective_img)
+			flare_img = torch.clamp(flare_img+reflective_img,min=0,max=1)     
+
+
+		flare_img=remove_background(flare_img)
+
 
 		#flare blur
 		#mannuly blur here, interteresting
@@ -253,16 +256,22 @@ class Flare_Image_Loader(data.Dataset):
 		# merge_img=torch.clamp(merge_img,min=0,max=1)
 		# merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AC_gain*ACES_profession_reverse(blur_transform(base_img)))
 		# merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AE_gain*ACES_profession_reverse(base_img))
+
 		merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AE_gain*ACES_profession_reverse(base_img))
 		# merge_img = torch.from_numpy(merge_img).float()
 		merge_img=torch.clamp(merge_img,min=0,max=1)
+
 		if self.light_flag:
 			base_img=base_img+light_img
 			base_img=torch.clamp(base_img,min=0,max=1)
 			flare_img=flare_img-light_img
 			flare_img=torch.clamp(flare_img,min=0,max=1)
+		print(flare_img.shape)
+		print(base_img.shape)
+		print(light_img.shape)
+		print(merge_img.shape)
 		if self.mask_type==None:
-			return {adjust_gamma_reverse(base_img),adjust_gamma_reverse(flare_img),adjust_gamma_reverse(merge_img),gamma}
+			return adjust_gamma_reverse(base_img),adjust_gamma_reverse(flare_img),adjust_gamma_reverse(merge_img),gamma
 		elif self.mask_type=="luminance":
 			#calculate mask (the mask is 3 channel)
 			one = torch.ones_like(base_img)

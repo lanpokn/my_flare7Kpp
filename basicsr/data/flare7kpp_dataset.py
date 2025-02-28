@@ -309,17 +309,9 @@ class Flare_Image_Loader(data.Dataset):
 				reflective_img =Image.open(reflective_path).convert('RGB')
 			else:
 				reflective_img = None
-
+		
 		flare_img=to_tensor(flare_img)
 		flare_img=adjust_gamma(flare_img)
-		
-		if self.reflective_flag and reflective_img is not None:
-			reflective_img=to_tensor(reflective_img)
-			reflective_img=adjust_gamma(reflective_img)
-			flare_img = torch.clamp(flare_img+reflective_img,min=0,max=1)
-
-		flare_img=remove_background(flare_img)
-
 		if self.transform_flare is not None:
 			if self.light_flag:
 				flare_merge=torch.cat((flare_img, light_img), dim=0)
@@ -334,6 +326,16 @@ class Flare_Image_Loader(data.Dataset):
 		else:
 			flare_img=color_jitter(flare_img)
 
+		if self.reflective_flag and reflective_img is not None:
+			reflective_img=to_tensor(reflective_img)
+			reflective_img=adjust_gamma(reflective_img)
+			if self.transform_flare is not None:
+				reflective_img=self.transform_flare(reflective_img)
+			flare_img = torch.clamp(flare_img+reflective_img,min=0,max=1)     
+
+
+		flare_img=remove_background(flare_img)
+
 		#flare blur
 		#mannuly blur here, interteresting
 		blur_transform=transforms.GaussianBlur(21,sigma=(0.1,3.0))
@@ -346,8 +348,8 @@ class Flare_Image_Loader(data.Dataset):
 
 		# can't predict auto exposure, thus use it，AC_gain is  different factor compared with tone mapping 
         # maybe 0.5 is too low, use 0.75 instead	
-		# AE_gain=np.random.uniform(0.9,1.0)
-		AE_gain=1
+		AE_gain=np.random.uniform(0.9,1.0)
+		# AE_gain=1
 		# flare_img=flare_img+AE_gain*base_img
   		# # the artifact on the lens will also cause the scene to become unclear
 		blur_transform=transforms.GaussianBlur(3,sigma=(0.01,0.5))
@@ -356,8 +358,8 @@ class Flare_Image_Loader(data.Dataset):
 		# merge_img=flare_img+AE_gain*base_img
 		# merge_img=torch.clamp(merge_img,min=0,max=1)
 		# merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AC_gain*ACES_profession_reverse(blur_transform(base_img)))
-		# merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AE_gain*ACES_profession_reverse(base_img))
 		merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AE_gain*ACES_profession_reverse(base_img))
+		# merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AE_gain*ACES_profession_reverse(base_img))
 		# merge_img = torch.from_numpy(merge_img).float()
 		merge_img=torch.clamp(merge_img,min=0,max=1)
 		if self.light_flag:

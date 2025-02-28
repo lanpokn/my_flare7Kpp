@@ -82,8 +82,8 @@ class DeflareModel(SRModel):
         if self.output_ch==6:
             l1_recons= self.l1_pix(self.merge_hat, self.lq)
             # print(1) loss_dict['l1_recons']根本没用，我被骗了
-            loss_dict['l1_recons']=l1_recons*2*0
-            l1+=l1_recons*2*0
+            loss_dict['l1_recons']=l1_recons*2
+            l1+=l1_recons*2
         l_total += l1
         loss_dict['l1_flare']=l1_flare
         loss_dict['l1_base']=l1_base
