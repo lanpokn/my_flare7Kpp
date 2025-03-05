@@ -149,10 +149,10 @@ def predict_flare_from_6_channel(input_tensor,gamma):
     # merge_img = torch.from_numpy(merge_img).float()
     # merge_img=torch.clamp(merge_img,min=0,max=1)
     merge_img_predicted_linear=adjust_gamma(deflare_img,gamma)+adjust_gamma(flare_img_predicted,gamma)
-    # merge_img_predicted_linear = ACES_profession(
-    #     ACES_profession_reverse(adjust_gamma(flare_img_predicted, gamma)) +
-    #     ACES_profession_reverse(adjust_gamma(deflare_img, gamma))
-    # )
+    merge_img_predicted_linear = ACES_profession(
+        ACES_profession_reverse(adjust_gamma(flare_img_predicted, gamma)) +
+        ACES_profession_reverse(adjust_gamma(deflare_img, gamma))
+    )
     merge_img_predicted = adjust_gamma_reverse(
         torch.clamp(merge_img_predicted_linear, 1e-7, 1.0), gamma
     )
