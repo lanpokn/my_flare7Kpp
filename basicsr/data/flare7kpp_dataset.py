@@ -13,6 +13,32 @@ import torch
 import numpy as np
 import torch
 from basicsr.utils.registry import DATASET_REGISTRY
+
+
+import cv2
+
+def undistort_image(flare_img: torch.Tensor, focal_length: float = 800, k1: float = -1.0, k2: float = 0, k3: float = 0) -> torch.Tensor:
+
+    flare_img = torch.clamp(flare_img, min=0, max=1)
+
+
+    flare_img_np = flare_img.numpy().transpose(1, 2, 0)  
+
+
+    principal_point = (flare_img_np.shape[1] / 2, flare_img_np.shape[0] / 2)
+    camera_matrix = np.array([[focal_length, 0, principal_point[0]],
+                              [0, focal_length, principal_point[1]],
+                              [0, 0, 1]])
+
+    dist_coeffs = np.array([k1, k2, 0, 0, k3])
+
+    undistorted_img_np = cv2.undistort(flare_img_np, camera_matrix, dist_coeffs)
+
+    undistorted_img = torch.from_numpy(undistorted_img_np).permute(2, 0, 1).float()  
+
+    undistorted_img = torch.clamp(undistorted_img, min=0, max=1)
+
+    return undistorted_img
 def ACES_profession(x):
 	# 定义输入和输出的转换矩阵
 	ACESInputMat = np.array([
@@ -393,6 +419,10 @@ class Flare_Image_Loader(data.Dataset):
 		blur_transform=transforms.GaussianBlur(21,sigma=(0.1,3.0))
 		flare_img=blur_transform(flare_img)
 		#flare_img=flare_img+flare_DC_offset
+		#TODO, may need test
+		if np.random.uniform(0,1.0) > 0.5:
+			flare_img = undistort_image(flare_img,k1 = np.random.uniform(-1.5,1.5))
+
 		flare_img=torch.clamp(flare_img,min=0,max=1)
 
 		#merge image
@@ -410,9 +440,12 @@ class Flare_Image_Loader(data.Dataset):
 		# merge_img=flare_img+AE_gain*base_img
 		# merge_img=torch.clamp(merge_img,min=0,max=1)
 		# merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AC_gain*ACES_profession_reverse(blur_transform(base_img)))
-		merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AE_gain*ACES_profession_reverse(base_img))
-		# merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AE_gain*ACES_profession_reverse(base_img))
-		merge_img = torch.from_numpy(merge_img).float()
+		if np.random.uniform(0,1.0) > 0.5:
+			merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AE_gain*ACES_profession_reverse(base_img))
+			# merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AE_gain*ACES_profession_reverse(base_img))
+			merge_img = torch.from_numpy(merge_img).float()
+		else:
+			merge_img = flare_img+base_img
 		merge_img=torch.clamp(merge_img,min=0,max=1)
 		if self.light_flag:
 			base_img=base_img+light_img

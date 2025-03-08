@@ -12,7 +12,33 @@ from torch.distributions import Normal
 import torch
 import numpy as np
 import torch
-import torch
+
+import torch.nn.functional as F
+
+import cv2
+
+def undistort_image(flare_img: torch.Tensor, focal_length: float = 800, k1: float = -1.0, k2: float = 0, k3: float = 0) -> torch.Tensor:
+
+    flare_img = torch.clamp(flare_img, min=0, max=1)
+
+
+    flare_img_np = flare_img.numpy().transpose(1, 2, 0)  
+
+
+    principal_point = (flare_img_np.shape[1] / 2, flare_img_np.shape[0] / 2)
+    camera_matrix = np.array([[focal_length, 0, principal_point[0]],
+                              [0, focal_length, principal_point[1]],
+                              [0, 0, 1]])
+
+    dist_coeffs = np.array([k1, k2, 0, 0, k3])
+
+    undistorted_img_np = cv2.undistort(flare_img_np, camera_matrix, dist_coeffs)
+
+    undistorted_img = torch.from_numpy(undistorted_img_np).permute(2, 0, 1).float()  
+
+    undistorted_img = torch.clamp(undistorted_img, min=0, max=1)
+
+    return undistorted_img
 
 def ACES_profession(x):
     """PyTorch 版 ACES 颜色转换"""
@@ -208,6 +234,7 @@ class Flare_Image_Loader(data.Dataset):
 
 		flare_img=to_tensor(flare_img)
 		flare_img=adjust_gamma(flare_img)
+
 		if self.transform_flare is not None:
 			if self.light_flag:
 				flare_merge=torch.cat((flare_img, light_img), dim=0)
@@ -238,8 +265,14 @@ class Flare_Image_Loader(data.Dataset):
 		blur_transform=transforms.GaussianBlur(21,sigma=(0.1,3.0))
 		flare_img=blur_transform(flare_img)
 		#flare_img=flare_img+flare_DC_offset
+		#base img也许不用加畸变，因为本来这些图像就是实拍的，本来就有畸变，再加略显重复
+		#不过都可以测
+		distor_factor = np.random.uniform(-1.5,1.5)
+		flare_img = undistort_image(flare_img,k1=distor_factor)
+		base_img = undistort_image(base_img,k1=distor_factor)
+  
 		flare_img=torch.clamp(flare_img,min=0,max=1)
-
+		print(flare_img)
 		#merge image
         #TODO, using inverse tone mapping, add and then tone maaping	
 
@@ -249,6 +282,7 @@ class Flare_Image_Loader(data.Dataset):
 		AE_gain=1
 		# flare_img=flare_img+AE_gain*base_img
   		# # the artifact on the lens will also cause the scene to become unclear
+        
 		blur_transform=transforms.GaussianBlur(3,sigma=(0.01,0.5))
   
 		# merge_img=flare_img+blur_transform(base_img)
