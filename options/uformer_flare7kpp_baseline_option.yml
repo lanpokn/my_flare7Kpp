@@ -71,7 +71,9 @@ train:
     lr: !!float 1e-4
     weight_decay: 0
     betas: [0.9, 0.99]
-
+# this may need to become larger when dataset is large
+# original is 200000
+# first test original 200000, then enlarge it
   scheduler:
     type: MultiStepLR
     milestones: [200000]

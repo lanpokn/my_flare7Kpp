@@ -16,3 +16,5 @@ python test_large.py --input myval/night/flare --output result/myval/night/ --mo
 python test_large.py --input myval/night/flare --output result/myval/night/ --model_path experiments/tone_AE095_noloss_best.pth --flare7kpp
 
 python my_evaluate.py --input result/myval/night/blend/ --gt myval/night/clear
+
+python my_evaluate.py --input C:\\Users\\admin\\Documents\\2025\\DiffUIR-main\\result\\flare --gt C:\\Users\\admin\\Documents\\2025\\DiffUIR-main\\Datasets\\flare\\test\\scene

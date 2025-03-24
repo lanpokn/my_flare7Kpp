@@ -390,12 +390,7 @@ class Flare_Image_Loader(data.Dataset):
 		flare_img=to_tensor(flare_img)
 		flare_img=adjust_gamma(flare_img)
 		
-		if self.reflective_flag and reflective_img is not None:
-			reflective_img=to_tensor(reflective_img)
-			reflective_img=adjust_gamma(reflective_img)
-			flare_img = torch.clamp(flare_img+reflective_img,min=0,max=1)
 
-		flare_img=remove_background(flare_img)
 
 		if self.transform_flare is not None:
 			if self.light_flag:
@@ -411,7 +406,14 @@ class Flare_Image_Loader(data.Dataset):
 		else:
 			flare_img=color_jitter(flare_img)
    
-   
+		if self.reflective_flag and reflective_img is not None:
+			reflective_img=to_tensor(reflective_img)
+			reflective_img=adjust_gamma(reflective_img)
+			if self.transform_flare is not None:
+				reflective_img=self.transform_flare(reflective_img)
+			flare_img = torch.clamp(flare_img+reflective_img,min=0,max=1)
+
+		flare_img=remove_background(flare_img)
    
 
 		#flare blur
@@ -420,8 +422,10 @@ class Flare_Image_Loader(data.Dataset):
 		flare_img=blur_transform(flare_img)
 		#flare_img=flare_img+flare_DC_offset
 		#TODO, may need test
+		distortion = np.random.uniform(-1.5,0)
 		if np.random.uniform(0,1.0) > 0.5:
-			flare_img = undistort_image(flare_img,k1 = np.random.uniform(-1.5,1.5))
+			flare_img = undistort_image(flare_img,k1 = distortion)
+			light_img = undistort_image(light_img,k1 = distortion)
 
 		flare_img=torch.clamp(flare_img,min=0,max=1)
 
@@ -452,6 +456,29 @@ class Flare_Image_Loader(data.Dataset):
 			base_img=torch.clamp(base_img,min=0,max=1)
 			flare_img=flare_img-light_img
 			flare_img=torch.clamp(flare_img,min=0,max=1)
+		AE_gain=np.random.uniform(0.95,1.0)
+		# AE_gain=1
+		# flare_img=flare_img+AE_gain*base_img
+  		# # the artifact on the lens will also cause the scene to become unclear
+		blur_transform=transforms.GaussianBlur(3,sigma=(0.01,0.5))
+  
+		# merge_img=flare_img+blur_transform(base_img)
+		# merge_img=flare_img+AE_gain*base_img
+		# merge_img=torch.clamp(merge_img,min=0,max=1)
+		# merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AC_gain*ACES_profession_reverse(blur_transform(base_img)))
+		if np.random.uniform(0,1.0) > 0.5:
+			merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AE_gain*ACES_profession_reverse(base_img))
+			# merge_img = ACES_profession(ACES_profession_reverse(flare_img)+ AE_gain*ACES_profession_reverse(base_img))
+			merge_img = torch.from_numpy(merge_img).float()
+		else:
+			merge_img = flare_img+base_img
+		merge_img=torch.clamp(merge_img,min=0,max=1)
+		if self.light_flag:
+			base_img=base_img+light_img
+			base_img=torch.clamp(base_img,min=0,max=1)
+			flare_img=flare_img-light_img
+			flare_img=torch.clamp(flare_img,min=0,max=1)
+   
 		if self.mask_type==None:
 			return {'gt': adjust_gamma_reverse(base_img),'flare': adjust_gamma_reverse(flare_img),'lq': adjust_gamma_reverse(merge_img),'gamma':gamma}
 		elif self.mask_type=="luminance":

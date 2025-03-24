@@ -39,93 +39,181 @@ def undistort_image(flare_img: torch.Tensor, focal_length: float = 800, k1: floa
     undistorted_img = torch.clamp(undistorted_img, min=0, max=1)
 
     return undistorted_img
-
 def ACES_profession(x):
-    """PyTorch 版 ACES 颜色转换"""
-    ACESInputMat = torch.tensor([
-        [0.59719, 0.35458, 0.04823],
-        [0.07600, 0.90834, 0.01566],
-        [0.02840, 0.13383, 0.83777]
-    ], dtype=torch.float32, device=x.device)
+	# 定义输入和输出的转换矩阵
+	ACESInputMat = np.array([
+		[0.59719, 0.35458, 0.04823],
+		[0.07600, 0.90834, 0.01566],
+		[0.02840, 0.13383, 0.83777]
+	])
 
-    ACESOutputMat = torch.tensor([
-        [1.60475, -0.53108, -0.07367],
-        [-0.10208, 1.10813, -0.00605],
-        [-0.00327, -0.07276, 1.07602]
-    ], dtype=torch.float32, device=x.device)
+	ACESOutputMat = np.array([
+		[1.60475, -0.53108, -0.07367],
+		[-0.10208, 1.10813, -0.00605],
+		[-0.00327, -0.07276, 1.07602]
+	])
 
-    def RRTAndODTFit(v):
-        """PyTorch 版 RRT 和 ODT 映射"""
-        a = v * (v + 0.0245786) - 0.000090537
-        b = v * (0.983729 * v + 0.4329510) + 0.238081
-        return a / b
+	def RRTAndODTFit(v):
+		"""
+		模拟 HLSL 的 RRTAndODTFit 函数
+		"""
+		a = v * (v + 0.0245786) - 0.000090537
+		b = v * (0.983729 * v + 0.4329510) + 0.238081
+		return a / b
 
-    # 将图像展平为 (N, 3)
-    original_shape = x.shape
-    color = x.reshape(-1, 3).T
+	# 将图像展平为二维矩阵 (N, 3)，其中 N 是像素数
+	original_shape = x.shape
+	color = x.reshape(-1, 3).T
 
-    # 转换为线性空间
-    color = torch.matmul(ACESInputMat, color)
+	# 转换为线性空间
+	color = np.dot(ACESInputMat, color)
 
-    # 应用 RRT 和 ODT 映射
-    color = RRTAndODTFit(color)
+	# 应用 RRT 和 ODT 映射
+	color = RRTAndODTFit(color)
 
-    # 转换为 sRGB 空间
-    color = torch.matmul(ACESOutputMat, color)
+	# 转换为 sRGB 空间
+	color = np.dot(ACESOutputMat, color)
 
-    # 恢复原始形状
-    color = color.T.reshape(original_shape)
+	# 恢复为原始图像形状
+	color = color.T.reshape(original_shape)
 
-    return color
-
+	return color
 
 def ACES_profession_reverse(x):
-    """PyTorch 版 ACES 颜色逆变换"""
-    ACESInputMat = torch.tensor([
-        [0.59719, 0.35458, 0.04823],
-        [0.07600, 0.90834, 0.01566],
-        [0.02840, 0.13383, 0.83777]
-    ], dtype=torch.float32, device=x.device)
+	# 定义输入和输出的转换矩阵
+	ACESInputMat = np.array([
+		[0.59719, 0.35458, 0.04823],
+		[0.07600, 0.90834, 0.01566],
+		[0.02840, 0.13383, 0.83777]
+	])
 
-    ACESOutputMat = torch.tensor([
-        [1.60475, -0.53108, -0.07367],
-        [-0.10208, 1.10813, -0.00605],
-        [-0.00327, -0.07276, 1.07602]
-    ], dtype=torch.float32, device=x.device)
+	ACESOutputMat = np.array([
+		[1.60475, -0.53108, -0.07367],
+		[-0.10208, 1.10813, -0.00605],
+		[-0.00327, -0.07276, 1.07602]
+	])
 
-    ACESInputMat_inv = torch.inverse(ACESInputMat)
-    ACESOutputMat_inv = torch.inverse(ACESOutputMat)
+	ACESInputMat_inv = np.linalg.inv(ACESInputMat)
+	ACESOutputMat_inv = np.linalg.inv(ACESOutputMat)
 
-    def RRTAndODTFitInverse(y):
-        """PyTorch 版 RRT 和 ODT 逆映射"""
-        A = 0.983729 * y - 1
-        B = 0.4329510 * y - 0.0245786
-        C = 0.238081 * y + 0.000090537
+	def RRTAndODTFitInverse(y):
+		"""
+		计算 RRTAndODTFit 的逆函数
+		"""
+		A = 0.983729 * y - 1
+		B = 0.4329510 * y - 0.0245786
+		C = 0.238081 * y + 0.000090537
 
-        discriminant = B**2 - 4 * A * C
-        sqrt_discriminant = torch.sqrt(discriminant)
+		discriminant = B**2 - 4 * A * C
+		sqrt_discriminant = np.sqrt(discriminant)
 
-        # 选择符合 v > 0 的解
-        v2 = (-B - sqrt_discriminant) / (2 * A)
-        return v2
+		# 选择符合 v > 0 的解
+		v2 = (-B - sqrt_discriminant) / (2 * A)
+		return v2
 
-    # 将图像展平为 (N, 3)
-    original_shape = x.shape
-    color = x.reshape(-1, 3).T
+	# 将图像展平为二维矩阵 (N, 3)，其中 N 是像素数
+	original_shape = x.shape
+	color = x.reshape(-1, 3).T
 
-    # 转换为线性空间
-    color = torch.matmul(ACESOutputMat_inv, color)
+	# 转换为线性空间
+	color = np.dot(ACESOutputMat_inv, color)
 
-    # 应用 RRT 和 ODT 逆映射
-    color = RRTAndODTFitInverse(color)
+	# 应用 RRT 和 ODT 映射的逆函数
+	color = RRTAndODTFitInverse(color)
 
-    # 转换为 sRGB 空间
-    color = torch.matmul(ACESInputMat_inv, color)
+	# 转换为 sRGB 空间
+	color = np.dot(ACESInputMat_inv, color)
 
-    # 恢复原始形状
-    color = color.T.reshape(original_shape)
+	# 恢复为原始图像形状
+	color = color.T.reshape(original_shape)
 
-    return color
+	return color
+# def ACES_profession(x):
+#     """PyTorch 版 ACES 颜色转换"""
+#     ACESInputMat = torch.tensor([
+#         [0.59719, 0.35458, 0.04823],
+#         [0.07600, 0.90834, 0.01566],
+#         [0.02840, 0.13383, 0.83777]
+#     ], dtype=torch.float32, device=x.device)
+
+#     ACESOutputMat = torch.tensor([
+#         [1.60475, -0.53108, -0.07367],
+#         [-0.10208, 1.10813, -0.00605],
+#         [-0.00327, -0.07276, 1.07602]
+#     ], dtype=torch.float32, device=x.device)
+
+#     def RRTAndODTFit(v):
+#         """PyTorch 版 RRT 和 ODT 映射"""
+#         a = v * (v + 0.0245786) - 0.000090537
+#         b = v * (0.983729 * v + 0.4329510) + 0.238081
+#         return a / b
+
+#     # 将图像展平为 (N, 3)
+#     original_shape = x.shape
+#     color = x.reshape(-1, 3).T
+
+#     # 转换为线性空间
+#     color = torch.matmul(ACESInputMat, color)
+
+#     # 应用 RRT 和 ODT 映射
+#     color = RRTAndODTFit(color)
+
+#     # 转换为 sRGB 空间
+#     color = torch.matmul(ACESOutputMat, color)
+
+#     # 恢复原始形状
+#     color = color.T.reshape(original_shape)
+
+#     return color
+
+
+# def ACES_profession_reverse(x):
+#     """PyTorch 版 ACES 颜色逆变换"""
+#     ACESInputMat = torch.tensor([
+#         [0.59719, 0.35458, 0.04823],
+#         [0.07600, 0.90834, 0.01566],
+#         [0.02840, 0.13383, 0.83777]
+#     ], dtype=torch.float32, device=x.device)
+
+#     ACESOutputMat = torch.tensor([
+#         [1.60475, -0.53108, -0.07367],
+#         [-0.10208, 1.10813, -0.00605],
+#         [-0.00327, -0.07276, 1.07602]
+#     ], dtype=torch.float32, device=x.device)
+
+#     ACESInputMat_inv = torch.inverse(ACESInputMat)
+#     ACESOutputMat_inv = torch.inverse(ACESOutputMat)
+
+#     def RRTAndODTFitInverse(y):
+#         """PyTorch 版 RRT 和 ODT 逆映射"""
+#         A = 0.983729 * y - 1
+#         B = 0.4329510 * y - 0.0245786
+#         C = 0.238081 * y + 0.000090537
+
+#         discriminant = B**2 - 4 * A * C
+#         sqrt_discriminant = torch.sqrt(discriminant)
+
+#         # 选择符合 v > 0 的解
+#         v2 = (-B - sqrt_discriminant) / (2 * A)
+#         return v2
+
+#     # 将图像展平为 (N, 3)
+#     original_shape = x.shape
+#     color = x.reshape(-1, 3).T
+
+#     # 转换为线性空间
+#     color = torch.matmul(ACESOutputMat_inv, color)
+
+#     # 应用 RRT 和 ODT 逆映射
+#     color = RRTAndODTFitInverse(color)
+
+#     # 转换为 sRGB 空间
+#     color = torch.matmul(ACESInputMat_inv, color)
+
+#     # 恢复原始形状
+#     color = color.T.reshape(original_shape)
+
+#     return color
 
 
 class RandomGammaCorrection(object):
@@ -267,9 +355,13 @@ class Flare_Image_Loader(data.Dataset):
 		#flare_img=flare_img+flare_DC_offset
 		#base img也许不用加畸变，因为本来这些图像就是实拍的，本来就有畸变，再加略显重复
 		#不过都可以测
-		distor_factor = np.random.uniform(-1.5,1.5)
-		flare_img = undistort_image(flare_img,k1=distor_factor)
-		base_img = undistort_image(base_img,k1=distor_factor)
+		# can only expand, of too fake
+		distortion = np.random.uniform(-1.5,0)
+		distortion = -1.5
+		flare_img = undistort_image(flare_img,k1=distortion)
+		light_img = undistort_image(light_img,k1 = distortion)
+
+		# base_img = undistort_image(base_img,k1=distor_factor)
   
 		flare_img=torch.clamp(flare_img,min=0,max=1)
 		print(flare_img)
@@ -305,7 +397,7 @@ class Flare_Image_Loader(data.Dataset):
 		print(light_img.shape)
 		print(merge_img.shape)
 		if self.mask_type==None:
-			return adjust_gamma_reverse(base_img),adjust_gamma_reverse(flare_img),adjust_gamma_reverse(merge_img),gamma
+			return adjust_gamma_reverse(base_img),adjust_gamma_reverse(flare_img+light_img),adjust_gamma_reverse(merge_img),adjust_gamma_reverse(base_img-light_img)
 		elif self.mask_type=="luminance":
 			#calculate mask (the mask is 3 channel)
 			one = torch.ones_like(base_img)
